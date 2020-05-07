@@ -1,0 +1,396 @@
+---
+title: "Analysis of gp41/V3 library replicates"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Purpose
+I would like to determine where bottlenecks are occurring during the generation of my PhIP seq library. I have deeply sequenced 4 biological replicates of my library and will compare the correlation between read counts and coverage across the gp41 protein.
+
+##Correlation between input libraries
+Import relevant packages
+```{r}
+library(tidyverse)
+library(gridExtra)
+library(GGally)
+```
+
+Import annotated counts sheet (from 10/05/18)
+```{r}
+Input_counts <-read_csv("data/2018.10.05.annotatedCounts.csv")
+print(Input_counts)
+```
+
+
+Order from highest to lowest values in column "id", then select only the input columns
+```{r}
+Input_counts <- Input_counts %>% 
+  arrange(id) %>%
+  select(id, Virus_Protein_Loc_AA, "Input-Lib1", "Input-Lib2a", "Input-Lib2b", "Input-Lib2") %>%
+  separate(Virus_Protein_Loc_AA, c("Virus", "Protein", "Loc", "AA"), convert = TRUE) %>%
+ print()
+```
+
+##Import the gp41/V3 Phage-DMS library key in order to label each peptide with the correct position and WT labels
+Import csv, then left join the WT table together to the analysis table
+
+```{r}
+WT_protein_tibble <- read_csv("data/gp41V3_PhageDMS_library_key.csv")
+
+Input_counts <- left_join(Input_counts, WT_protein_tibble, by = c("Loc", "AA", "Virus", "Protein")) 
+
+#This is to fill in the HXB2_Loc and Correct_Loc numbers within a group
+Input_counts <- Input_counts %>% 
+  group_by(Virus, Protein, Loc) %>% 
+  fill(HXB2_Loc, .direction = c("up")) %>%
+  fill(HXB2_Loc, .direction = c("down")) %>%
+  fill(Correct_Loc, .direction = c("up")) %>%
+  fill(Correct_Loc, .direction = c("down")) %>%
+  ungroup()
+```
+
+Graph a histogram of the read counts for each input library
+```{r}
+Input_Lib1_histogram <- count_data %>% 
+  select("Input-Lib1") %>% filter(`Input-Lib1` < 6000)
+
+qplot(Input_Lib1_histogram$"Input-Lib1", geom="histogram", binwidth=5, ylab="# of peptides", xlab="read counts - Library 1") + theme_classic(base_size = 20) 
+ggsave("results/library_analysis/gp41V3_Input_Lib1_histogram.jpg")
+
+```
+
+```{r}
+Input_Lib2_histogram <- count_data %>% 
+  select("Input-Lib2") %>% filter(`Input-Lib2` < 6000)
+
+qplot(Input_Lib2_histogram$"Input-Lib2", geom="histogram", binwidth=5, ylab="# of peptides", xlab="read counts - Library 2") + theme_classic(base_size = 20)
+ggsave("results/library_analysis/gp41V3_Input_Lib2_histogram.jpg")
+```
+
+Want to see how many peptides are counted 0 times in each library
+```{r}
+sum(Input_Lib1_histogram$"Input-Lib1" == 0)
+nrow(Input_Lib1_histogram)
+```
+
+```{r}
+sum(Input_Lib2_histogram$"Input-Lib2" == 0)
+nrow(Input_Lib2_histogram)
+```
+
+
+Now plot correlation plots in a matrix, with regression lines
+```{r}
+ggpairs(Input_counts, columns=c("Input-Lib1", "Input-Lib2", "Input-Lib2a", "Input-Lib2b"), diag = list("continuous"="blank")) + theme_bw(base_size = 12)
+ggsave("results/library_analysis/gp41V3_Input_correlations_withoutlier.jpg")
+```
+
+I would like to see the correlation without the outlier, so I am going to remove anything above 6000
+```{r}
+Input_counts_noOutlier <- Input_counts %>%
+  filter(`Input-Lib1`< 6000) %>%
+  print()
+```
+
+Now plot the correlations again, this time without the outlier
+```{r}
+ggpairs(Input_counts_noOutlier, columns=c("Input-Lib1", "Input-Lib2", "Input-Lib2a", "Input-Lib2b"), diag = list("continuous"="blank")) + theme_bw(base_size = 12)
+ggsave("results/library_analysis/gp41V3_Input_correlations_no_outlier.jpg")
+```
+
+##Correlation between beads only controls, biological replicates
+Creat new document with only beads only controls (called mock), then plot correlations, this time between beads only controls instead of input library
+```{r}
+Mock_counts <- count_data %>% 
+  arrange(id) %>%
+  select(id, Virus_Protein_Loc_AA, 'Beads-only-Lib1-1',	'Beads-only-Lib1-2',	'Beads-only-Lib2-1',	'Beads-only-Lib2-2',	'Beads-only-Lib2a',	'Beads-only-Lib2b') %>%
+print()
+```
+
+Then plot correlation between biological replicates of the library
+```{r}
+ggpairs(Mock_counts, columns=c('Beads-only-Lib1-1',	'Beads-only-Lib2-1','Beads-only-Lib2a',	'Beads-only-Lib2b'))
+ggsave("results/library_analysis/gp41V3_Mock_correlations_withoutlier.jpg")
+```
+
+Also need to get rid of the outlier, then plot the correlations again
+```{r}
+Mock_counts_noOutlier <- Mock_counts %>%
+  filter(`Beads-only-Lib1-1`< 6000)
+  
+ggpairs(Mock_counts_noOutlier, columns=c('Beads-only-Lib1-1',	'Beads-only-Lib2-1','Beads-only-Lib2a',	'Beads-only-Lib2b'))
+ggsave("results/library_analysis/gp41V3_Mock_correlations_no_outlier.jpg")
+```
+
+Also looking at the correlations using the second technical replicate from Lib1 and Lib2
+```{r}
+ggpairs(Mock_counts_noOutlier, columns=c('Beads-only-Lib1-2',	'Beads-only-Lib2-2','Beads-only-Lib2a',	'Beads-only-Lib2b'))
+ggsave("results/library_analysis/gp41V3_Mock_correlationsv2_no_outlier.jpg")
+```
+
+
+##Correlation between beads only controls, within technical replicates
+```{r}
+ggpairs(Mock_counts_noOutlier, columns=c('Beads-only-Lib1-1',	'Beads-only-Lib1-2'), diag = list("continuous"="blank")) + theme_bw(base_size = 12)
+ggsave("results/library_analysis/gp41V3_Mock_correlations_Lib1_technical_reps.jpg")
+```
+
+```{r}
+ggpairs(Mock_counts_noOutlier, columns=c('Beads-only-Lib2-1',	'Beads-only-Lib2-2'), diag = list("continuous"="blank")) + theme_bw(base_size = 12)
+ggsave("results/library_analysis/gp41V3_Mock_correlations_Lib2_technical_reps.jpg")
+```
+
+##Correlation between beads only control and input (same library)
+First get rid of that pesky outlier, then plot input lib1 vs beads only with lib1
+```{r}
+count_data_noOutlier <- count_data %>% filter(`Beads-only-Lib1-1`< 6000)
+
+ggpairs(count_data_noOutlier, columns=c('Input-Lib1',	'Beads-only-Lib1-1'))
+ggsave("results/library_analysis/gp41V3_Lib1_mock_rep1_correlation.jpg")
+```
+
+```{r}
+ggpairs(count_data_noOutlier, columns=c('Input-Lib1',	'Beads-only-Lib1-2'))
+ggsave("results/library_analysis/gp41V3_Lib1_mock_rep2_correlation.jpg")
+```
+
+```{r}
+ggpairs(count_data_noOutlier, columns=c('Input-Lib2',	'Beads-only-Lib2-1'))
+ggsave("results/library_analysis/gp41V3_Lib2_mock_rep1_correlation.jpg")
+```
+
+```{r}
+ggpairs(count_data_noOutlier, columns=c('Input-Lib2',	'Beads-only-Lib2-2'))
+ggsave("results/library_analysis/gp41V3_Lib2_mock_rep2_correlation.jpg")
+```
+
+
+##Coverage of oligos across the protein, compared between libraries
+
+Plot read count by position (aka 'Loc') for BG505_gp41 in each input library
+```{r}
+
+BG505_gp41_Lib1 <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp41 amino acid position", y="total reads")
+
+BG505_gp41_Lib2 <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp41 amino acid position", y="total reads")
+
+BG505_gp41_Lib2a <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp41 amino acid position", y="total reads")
+
+BG505_gp41_Lib2b <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp41 amino acid position", y="total reads")
+
+
+grid.arrange(BG505_gp41_Lib1, BG505_gp41_Lib2, BG505_gp41_Lib2a, BG505_gp41_Lib2b, ncol=1)
+
+BG505_gp41 <- arrangeGrob(BG505_gp41_Lib1, BG505_gp41_Lib2, BG505_gp41_Lib2a, BG505_gp41_Lib2b, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_coverageplots_BG505_gp41.jpg", BG505_gp41)
+
+```
+
+Plot read count by row number (aka 'Loc') for BF520_gp41 in each input library
+```{r}
+
+BF520_gp41_Lib1 <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 gp41 amino acid position", y="total reads")
+
+BF520_gp41_Lib2 <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 gp41 amino acid position", y="total reads")
+
+BF520_gp41_Lib2a <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 gp41 amino acid position", y="total reads")
+
+BF520_gp41_Lib2b <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 gp41 amino acid position", y="total reads")
+
+grid.arrange(BF520_gp41_Lib1, BF520_gp41_Lib2, BF520_gp41_Lib2a, BF520_gp41_Lib2b, ncol=1)
+
+BF520_gp41 <- arrangeGrob(BF520_gp41_Lib1, BF520_gp41_Lib2, BF520_gp41_Lib2a, BF520_gp41_Lib2b, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_coverageplots_BF520_gp41.jpg", BF520_gp41)
+
+```
+
+
+
+Plot read count by position (aka 'Loc') for ZA1197_gp41 in each input library
+```{r}
+
+
+ZA1197_gp41_Lib1 <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 gp41 amino acid position", y="total reads")
+
+ZA1197_gp41_Lib2 <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 gp41 amino acid position", y="total reads")
+
+ZA1197_gp41_Lib2a <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 gp41 amino acid position", y="total reads")
+
+ZA1197_gp41_Lib2b <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "gp41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 gp41 amino acid position", y="total reads")
+
+grid.arrange(ZA1197_gp41_Lib1, ZA1197_gp41_Lib2, ZA1197_gp41_Lib2a, ZA1197_gp41_Lib2b, ncol=1)
+
+ZA1197_gp41 <- arrangeGrob(ZA1197_gp41_Lib1, ZA1197_gp41_Lib2, ZA1197_gp41_Lib2a, ZA1197_gp41_Lib2b, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_coverageplots_ZA1197_gp41.jpg", ZA1197_gp41)
+
+```
+
+
+
+Plot read count by position (aka 'Loc') for BG505_V3 in each input library
+```{r}
+
+
+BG505_V3_Lib1 <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 V3 amino acid position", y="total reads")
+
+BG505_V3_Lib2 <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 V3 amino acid position", y="total reads")
+
+BG505_V3_Lib2a <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 V3 amino acid position", y="total reads")
+
+BG505_V3_Lib2b <-Input_counts %>% filter(Virus == "BG505") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 V3 amino acid position", y="total reads")
+
+grid.arrange(BG505_V3_Lib1, BG505_V3_Lib2, BG505_V3_Lib2a, BG505_V3_Lib2b, ncol=1)
+BG505_V3 <- arrangeGrob(BG505_V3_Lib1, BG505_V3_Lib2, BG505_V3_Lib2a, BG505_V3_Lib2b, ncol=1)
+ggsave(file="results/library_analysis/gp41V3_coverageplots_BG505_V3.jpg", BG505_V3, width=8)
+
+```
+
+
+
+
+Plot read count by position (aka 'id') for BF520_V3 in each input library
+```{r}
+
+BF520_V3_Lib1 <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 V3 amino acid position", y="total reads") 
+
+BF520_V3_Lib2 <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 V3 amino acid position", y="total reads") 
+
+BF520_V3_Lib2a <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 V3 amino acid position", y="total reads") 
+
+BF520_V3_Lib2b <-Input_counts %>% filter(Virus == "BF520") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BF520 V3 amino acid position", y="total reads")  
+
+grid.arrange(BF520_V3_Lib1, BF520_V3_Lib2, BF520_V3_Lib2a, BF520_V3_Lib2b, ncol=1)
+
+BF520_V3 <- arrangeGrob(BF520_V3_Lib1, BF520_V3_Lib2, BF520_V3_Lib2a, BF520_V3_Lib2b, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_coverageplots_BF520_V3.jpg", BF520_V3)
+
+```
+
+
+Plot read count by position (aka 'id') for ZA1197_V3 in each input library
+```{r}
+
+ZA1197_V3_Lib1 <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 V3 amino acid position", y="total reads") 
+
+ZA1197_V3_Lib2 <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 V3 amino acid position", y="total reads") 
+
+ZA1197_V3_Lib2a <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2a`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 V3 amino acid position", y="total reads") 
+
+ZA1197_V3_Lib2b <-Input_counts %>% filter(Virus == "ZA1197") %>% filter(Protein == "V3") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`Input-Lib2b`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="ZA1197 V3 amino acid position", y="total reads")    
+
+grid.arrange(ZA1197_V3_Lib1, ZA1197_V3_Lib2, ZA1197_V3_Lib2a, ZA1197_V3_Lib2b, ncol=1)
+
+ZA1197_V3 <- arrangeGrob(ZA1197_V3_Lib1, ZA1197_V3_Lib2, ZA1197_V3_Lib2a, ZA1197_V3_Lib2b, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_coverageplots_ZA1197_V3.jpg", ZA1197_V3)
+
+```
+
+Now, I am just interested in seeing if ANY peptide was sequenced at each position (yes or no). Ideally we should sequence 20 peptides at each locus at least once
+Plot read presence by position (aka 'Loc') for gp41 in each gp41 protein library
+```{r}
+BG505_gp41_counts <- Input_counts %>% filter(Protein=="gp41") %>% filter(Virus=="BG505")
+BF520_gp41_counts <- Input_counts %>% filter(Protein=="gp41") %>% filter(Virus=="BF520")
+ZA1197_gp41_counts <- Input_counts %>% filter(Protein=="gp41") %>% filter(Virus=="ZA1197")
+
+
+BG505_gp41_counts$peptide_yes_no_Lib1 = ifelse(BG505_gp41_counts$'Input-Lib1'==0,0,1)
+BF520_gp41_counts$peptide_yes_no_Lib1 = ifelse(BF520_gp41_counts$'Input-Lib1'==0,0,1)
+ZA1197_gp41_counts$peptide_yes_no_Lib1 = ifelse(ZA1197_gp41_counts$'Input-Lib1'==0,0,1)
+```
+
+##Coverage plots for gp41, Library 1
+```{r}
+BG505_gp41_Lib1 <- BG505_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="BG505 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+BF520_gp41_Lib1 <- BF520_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="BF520 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+ZA1197_gp41_Lib1 <- ZA1197_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="ZA1197 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+grid.arrange(BG505_gp41_Lib1, BF520_gp41_Lib1, ZA1197_gp41_Lib1, ncol=1)
+
+gp41_Lib1_coverage <- arrangeGrob(BG505_gp41_Lib1, BF520_gp41_Lib1, ZA1197_gp41_Lib1, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_Lib1_coverageplots_gp41.jpg", gp41_Lib1_coverage)
+
+```
+
+```{r}
+BG505_gp41_counts$peptide_yes_no_Lib2 = ifelse(BG505_gp41_counts$'Input-Lib2'==0,0,1)
+BF520_gp41_counts$peptide_yes_no_Lib2 = ifelse(BF520_gp41_counts$'Input-Lib2'==0,0,1)
+ZA1197_gp41_counts$peptide_yes_no_Lib2 = ifelse(ZA1197_gp41_counts$'Input-Lib2'==0,0,1)
+```
+
+
+```{r}
+BG505_gp41_Lib2 <- BG505_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="BG505 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+BF520_gp41_Lib2 <- BF520_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="BF520 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+ZA1197_gp41_Lib2 <- ZA1197_gp41_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="ZA1197 gp41 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+grid.arrange(BG505_gp41_Lib2, BF520_gp41_Lib2, ZA1197_gp41_Lib2, ncol=1)
+
+gp41_Lib2_coverage <- arrangeGrob(BG505_gp41_Lib2, BF520_gp41_Lib2, ZA1197_gp41_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_Lib2_coverageplots_gp41.jpg", gp41_Lib2_coverage)
+
+```
+
+Now, I am just interested in seeing if ANY peptide was sequenced at each position (yes or no). Ideally we should sequence 20 peptides at each locus at least once
+Plot read presence by position (aka 'Loc') for V3 in each gp41 protein library
+```{r}
+BG505_V3_counts <- Input_counts %>% filter(Protein=="V3") %>% filter(Virus=="BG505")
+BF520_V3_counts <- Input_counts %>% filter(Protein=="V3") %>% filter(Virus=="BF520")
+ZA1197_V3_counts <- Input_counts %>% filter(Protein=="V3") %>% filter(Virus=="ZA1197")
+
+BG505_V3_counts$peptide_yes_no_Lib1 = ifelse(BG505_V3_counts$'Input-Lib1'==0,0,1)
+BF520_V3_counts$peptide_yes_no_Lib1 = ifelse(BF520_V3_counts$'Input-Lib1'==0,0,1)
+ZA1197_V3_counts$peptide_yes_no_Lib1 = ifelse(ZA1197_V3_counts$'Input-Lib1'==0,0,1)
+```
+
+```{r}
+BG505_V3_Lib1 <- ggplot() + geom_col(data = BG505_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="BG505 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+BF520_V3_Lib1 <- ggplot() + geom_col(data = BF520_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="BF520 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+ZA1197_V3_Lib1 <- ggplot() + geom_col(data = ZA1197_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="ZA1197 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+grid.arrange(BG505_V3_Lib1, BF520_V3_Lib1, ZA1197_V3_Lib1, ncol=1)
+
+V3_Lib1_coverage <- arrangeGrob(BG505_V3_Lib1, BF520_V3_Lib1, ZA1197_V3_Lib1, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_Lib1_coverageplots_V3.jpg", V3_Lib1_coverage)
+
+```
+
+```{r}
+BG505_V3_counts$peptide_yes_no_Lib2 = ifelse(BG505_V3_counts$'Input-Lib2'==0,0,1)
+BF520_V3_counts$peptide_yes_no_Lib2 = ifelse(BF520_V3_counts$'Input-Lib2'==0,0,1)
+ZA1197_V3_counts$peptide_yes_no_Lib2 = ifelse(ZA1197_V3_counts$'Input-Lib2'==0,0,1)
+```
+
+```{r}
+BG505_V3_Lib2 <- ggplot() + geom_col(data = BG505_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="BG505 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+BF520_V3_Lib2 <- ggplot() + geom_col(data = BF520_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="BF520 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+ZA1197_V3_Lib2 <- ggplot() + geom_col(data = ZA1197_V3_counts, aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="ZA1197 V3 amino acid position", y="# of peptides") + theme_classic() +coord_fixed(ratio=1)
+
+grid.arrange(BG505_V3_Lib2, BF520_V3_Lib2, ZA1197_V3_Lib2, ncol=1)
+
+V3_Lib2_coverage <- arrangeGrob(BG505_V3_Lib2, BF520_V3_Lib2, ZA1197_V3_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp41V3_Lib2_coverageplots_V3.jpg", V3_Lib2_coverage)
+
+
+```

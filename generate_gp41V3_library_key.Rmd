@@ -1,0 +1,265 @@
+---
+title: "Generating a key for peptide sequences - gp41/V3 library"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Generating a 'key' for the WT gp41/V3 peptides
+I would like to generate a key to use with all samples run with the gp41/V3 Phage DMS library. This will have columns with the Virus (ex: BG505), Protein (ex:gp120), Loc (ex:302), type (WT), AA (ex:C) and then additionally the corresponding HXB2_Loc (ex:306) and HXB2_AA (ex:C) in order to label things with the HXB2 location.
+
+This requires a fasta file containing an alignment between the Virus and Protein (ex: BG505 V3) and HXB2. This can be done by the LANL tool [HIVAlign](https://www.hiv.lanl.gov/content/sequence/VIRALIGN/viralign.html), aligning against the HIV Env protein sequence with HXB2 with HMM-align.
+
+##Load libraries needed
+```{r}
+library(tidyverse)
+library(Biostrings)
+library(seqinr)
+```
+
+##Upload fasta files of all proteins used in the library
+```{r}
+BG505_gp41 <- read.alignment(file = "data/BG505_gp41_alignment.fasta", format = "fasta" )
+
+BG505_V3 <- read.alignment(file = "data/BG505_V3_alignment.fasta", format = "fasta" )
+
+BF520_gp41 <- read.alignment(file = "data/BF520_gp41_alignment.fasta", format = "fasta" )
+
+BF520_V3 <- read.alignment(file = "data/BF520_V3_alignment.fasta", format = "fasta" )
+
+ZA1197_gp41 <- read.alignment(file = "data/ZA1197_gp41_alignment.fasta", format = "fasta" )
+
+ZA1197_V3 <- read.alignment(file = "data/ZA1197_V3_alignment.fasta", format = "fasta" )
+```
+
+##Create a tibble with BG505 gp41 alignment
+Creates a tibble with two columns: HXB2 AA and the BG505 gp41 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- BG505_gp41$seq[[1]]
+AA <- BG505_gp41$seq[[2]]
+
+#This creates a list from the two strings
+BG505_gp41_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+BG505_gp41_tibble <- as_tibble(BG505_gp41_list) 
+
+#This makes the letters all uppercase
+BG505_gp41_tibble <- transmute_all(BG505_gp41_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+BG505_gp41_tibble <- BG505_gp41_tibble %>% mutate(Virus = "BG505", Protein = "gp41", type = "WT")
+```
+
+##Create a tibble with BG505 V3 alignment
+Creates a tibble with two columns: HXB2 AA and the BG505 V3 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- BG505_V3$seq[[1]]
+AA <- BG505_V3$seq[[2]]
+
+#This creates a list from the two strings
+BG505_V3_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+BG505_V3_tibble <- as_tibble(BG505_V3_list) 
+
+#This makes the letters all uppercase
+BG505_V3_tibble <- transmute_all(BG505_V3_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+BG505_V3_tibble <- BG505_V3_tibble %>% mutate(Virus = "BG505", Protein = "V3", type = "WT")
+```
+
+##Create a tibble with BF520 gp41 alignment
+Creates a tibble with two columns: HXB2 AA and the BF520 gp41 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- BF520_gp41$seq[[1]]
+AA <- BF520_gp41$seq[[2]]
+
+#This creates a list from the two strings
+BF520_gp41_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+BF520_gp41_tibble <- as_tibble(BF520_gp41_list) 
+
+#This makes the letters all uppercase
+BF520_gp41_tibble <- transmute_all(BF520_gp41_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+BF520_gp41_tibble <- BF520_gp41_tibble %>% mutate(Virus = "BF520", Protein = "gp41", type = "WT")
+```
+
+##Create a tibble with BF520 V3 alignment
+Creates a tibble with two columns: HXB2 AA and the BF520 V3 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- BF520_V3$seq[[1]]
+AA <- BF520_V3$seq[[2]]
+
+#This creates a list from the two strings
+BF520_V3_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+BF520_V3_tibble <- as_tibble(BF520_V3_list) 
+
+#This makes the letters all uppercase
+BF520_V3_tibble <- transmute_all(BF520_V3_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+BF520_V3_tibble <- BF520_V3_tibble %>% mutate(Virus = "BF520", Protein = "V3", type = "WT")
+```
+
+##Create a tibble with ZA1197 gp41 alignment
+Creates a tibble with two columns: HXB2 AA and the ZA1197 gp41 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- ZA1197_gp41$seq[[1]]
+AA <- ZA1197_gp41$seq[[2]]
+
+#This creates a list from the two strings
+ZA1197_gp41_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+ZA1197_gp41_tibble <- as_tibble(ZA1197_gp41_list) 
+
+#This makes the letters all uppercase
+ZA1197_gp41_tibble <- transmute_all(ZA1197_gp41_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+ZA1197_gp41_tibble <- ZA1197_gp41_tibble %>% mutate(Virus = "ZA1197", Protein = "gp41", type = "WT")
+```
+
+##Create a tibble with ZA1197 V3 alignment
+Creates a tibble with two columns: HXB2 AA and the ZA1197 V3 AA
+```{r}
+#This creates two strings that contain the aligned sequences
+HXB2_AA <- ZA1197_V3$seq[[1]]
+AA <- ZA1197_V3$seq[[2]]
+
+#This creates a list from the two strings
+ZA1197_V3_list <- c(HXB2_AA = strsplit(HXB2_AA, split=""), AA = strsplit(AA, split=""))
+
+#This creates a tibble from the list, and makes the letters uppercase
+ZA1197_V3_tibble <- as_tibble(ZA1197_V3_list) 
+
+#This makes the letters all uppercase
+ZA1197_V3_tibble <- transmute_all(ZA1197_V3_tibble, funs(toupper))
+
+#This creates a column with the Virus name, Protein, and type
+ZA1197_V3_tibble <- ZA1197_V3_tibble %>% mutate(Virus = "ZA1197", Protein = "V3", type = "WT")
+```
+
+##Now bind the tibbles into one big tibble
+```{r}
+gp41V3_tibble <- bind_rows(BG505_gp41_tibble, BG505_V3_tibble, BF520_gp41_tibble, BF520_V3_tibble, ZA1197_gp41_tibble, ZA1197_V3_tibble)
+```
+
+##Get rid of all columns that contain a gap in both sequences
+Because I used curated alignments from LANL, this includes gaps that may be present in other sequences but not in my alignment.
+```{r}
+#This deletes all rows that have a "-" in both AA and HXB2_AA columns
+gp41V3_tibble <- subset(gp41V3_tibble, !(AA == "-" & HXB2_AA == "-"))
+```
+
+#Assign Loc numbers to HXB2 
+This assigns the correct HXB2_Loc numbering
+```{r}
+#First I have to make a row with "id" so that when I left join the tables back together they come together
+gp41V3_tibble <- 
+  mutate(gp41V3_tibble, id = row_number())
+
+#This creates a column HXB2_Loc and adds a number (labelling it with the correct Locus number within each Virus).  
+subset_gp41V3_tibble <- gp41V3_tibble %>%
+  group_by(Virus, Protein) %>% 
+  subset(HXB2_AA != "-") %>% 
+  mutate(HXB2_Loc = row_number()) %>%
+  ungroup() %>%
+  select(id, HXB2_Loc) 
+
+#This joins the table with HXB2_Loc numbers to the original table, then gets rid of the id column
+gp41V3_tibble <- left_join(gp41V3_tibble, subset_gp41V3_tibble, by=("id")) %>%
+  subset(select = -id)
+```
+
+
+##Now I need to rename all the rows where there is an HXB2 AA but no normal AA.
+Based on conventions, I need to convert all HXB2_AA rows that have a gap indicated by "NA" in the HXB2_Loc column, to a value containing the previous number + a letter. For example, if the previous number is 240 then the two gaps after it would be 240a and 240b. 
+
+```{r}
+#Need to first create a list of the alphabet to draw from
+list <- letters
+
+
+
+#Now I am creating a function to go down the column and replace any NA's with the previous number + a letter
+naming_convention <- function(column) {
+    
+  renamed = c()
+  x <- 1
+  last_seen_non_na <- 0
+  c <- 1
+  
+  # loop goes through all the elements in a column. The reason we don't use "in" is that we need to reference "a starting point" to copy the previous numbers. As an example, let's say you have [185, NA, 186]. At "NA", you need "185" as a reference and attach "a". So we have x which is used to loop through the program. We have c, which is a number to reference what letter we are on. As an example, [185, NA, NA, 186] needs to produce [185, 185a, 185b, 186]. In order to produce this, c is incremeented on every consecutive "NA", and will be reset when a new number is found. 
+  repeat {
+
+    if(x > length(column)){
+      break;
+    }
+    current <- column[x]
+    
+
+    # Check if NA, will start going through and adding "letters" on the end of the last seen, non-NA number. So [185, NA, 186] if X=2, current=NA and num=185. It enters this if statement and outputs "185a" and increments letter count so if another NA follows, you get "185b"
+    if(is.na(current)) {
+      renamed <- append(renamed, paste(last_seen_non_na, letters[c], sep=""))
+      # Move to next alphabetical letter
+      c = c + 1
+      
+    } else{
+      renamed <- append(renamed, current)
+      #Resets letter count for the next concurrent NA strand. 
+      c <- 1
+      # Reset "last_seen_non_na" to the non-NA number.
+      last_seen_non_na = current
+    }
+    #Iterate
+    x = x+1
+  }
+  
+  return (renamed)
+}
+
+gp41V3_tibble$HXB2_Loc <- as.character(gp41V3_tibble$HXB2_Loc)
+
+gp41V3_tibble <- gp41V3_tibble %>% group_by(Virus, Protein) %>% mutate(HXB2_Loc = naming_convention(HXB2_Loc))
+```
+
+#Assign Loc numbers to each Protein for the Virus of interest
+This assigns the correct Loc numbering, after first numbering the rows by row number. First I need to get rid of any row that doesn't have a value in the AA column, because I won't have any sequencing data for sites not included in the library.
+```{r}
+#This saves only the rows that do not contain a "-" in the AA column
+gp41V3_tibble <- subset(gp41V3_tibble, AA != "-")
+
+#This creates a column called "Loc" which numbers the locus, within the individual Virus group. It only assigns a number if there is no "-" in the row. 
+gp41V3_tibble <- gp41V3_tibble %>% 
+  group_by(Virus, Protein) %>% 
+  mutate(Loc = row_number()) %>% 
+  ungroup()
+```
+
+```{r}
+#Because the Loc numbers for V3 and gp41 start at 1, I need to add a number onto the Loc values. I do this by just looking up the Virus sequence on Genbank and seeing what number the V3/gp41 sequence starts at. THIS IS COMPLETELY SPECIFIC TO EACH VIRUS. 
+gp41V3_tibble <- gp41V3_tibble %>% 
+  mutate(Correct_Loc = case_when(Virus == "BG505" & Protein == "V3" ~ gp41V3_tibble$Loc + 294, Virus == "BG505" & Protein == "gp41" ~ gp41V3_tibble$Loc + 508, Virus == "BF520" & Protein == "V3" ~ gp41V3_tibble$Loc + 289, Virus == "BF520" & Protein == "gp41" ~ gp41V3_tibble$Loc + 500, Virus == "ZA1197" & Protein == "V3" ~ gp41V3_tibble$Loc + 292, Virus == "ZA1197" & Protein == "gp41" ~ gp41V3_tibble$Loc + 493))
+
+```
+
+Now export this key as a csv file to use with all sample analysis files
+```{r}
+gp41V3_tibble %>% write_csv("data/gp41V3_PhageDMS_library_key.csv")
+```
+

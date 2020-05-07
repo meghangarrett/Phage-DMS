@@ -1,0 +1,223 @@
+---
+title: "Analysis of gp41/V3 library replicates"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Purpose
+I would like to determine where bottlenecks are occurring during the generation of my PhIP seq library. I have deeply sequenced 4 biological replicates of my library and will compare the correlation between read counts and coverage across the gp120 protein.
+
+Based on prior knowledge, I am only interested in dissecting out gp120 sub lib1 and gp120 sub lib3 (these are the libraries we froze down and saved for experiments)
+
+##Correlation between input libraries
+Import relevant packages
+```{r}
+library(tidyverse)
+library(gridExtra)
+library(GGally)
+```
+
+Import annotated counts sheet (from 02/20/19)
+```{r}
+Input_counts <-read_csv("data/2019.02.20.annotatedCounts.csv")
+print(Input_counts)
+```
+
+Get number of sequences between 10 and 100
+```{r}
+Input_counts %>% nrow()
+Input_counts %>% subset(gp120_sub_library1 > 10) %>% subset(gp120_sub_library1 < 100) %>% nrow() 
+Input_counts %>% subset(gp120_sub_library3 > 10) %>% subset(gp120_sub_library3 < 100) %>% nrow() 
+```
+
+Order from highest to lowest values in column "id"
+```{r}
+Input_counts <- Input_counts %>% 
+  arrange(id) %>%
+ print()
+```
+
+##Import the gp120 Phage-DMS library key in order to label each peptide with the correct position and WT labels
+Import csv, then left join the WT table together to the analysis table
+
+```{r}
+WT_protein_tibble <- read_csv("data/gp120_PhageDMS_library_key.csv")
+
+Input_counts <- left_join(Input_counts, WT_protein_tibble, by = c("Loc", "AA", "Virus")) 
+
+#This is to fill in the HXB2_Loc and Correct_Loc numbers within a group
+Input_counts <- Input_counts %>% 
+  group_by(Virus, Loc) %>% 
+  fill(HXB2_Loc, .direction = c("up")) %>%
+  fill(HXB2_Loc, .direction = c("down")) %>%
+  fill(Correct_Loc, .direction = c("up")) %>%
+  fill(Correct_Loc, .direction = c("down")) %>%
+  ungroup()
+```
+
+Graph a histogram of the read counts for each input library
+```{r}
+gp120_sub_library1_histogram <- count_data %>% 
+  select("gp120_sub_library1") 
+
+qplot(gp120_sub_library1_histogram$"gp120_sub_library1", geom="histogram", binwidth=5, ylab="# of peptides", xlab="read counts - Library 1") + theme_classic(base_size = 20) 
+ggsave("results/library_analysis/gp120_Input_Lib1_histogram.jpg")
+
+```
+
+```{r}
+gp120_sub_library3_histogram <- count_data %>% 
+  select("gp120_sub_library3") 
+
+qplot(gp120_sub_library3_histogram$"gp120_sub_library3", geom="histogram", binwidth=5, ylab="# of peptides", xlab="read counts - Library 2") + theme_classic(base_size = 20)
+
+ggsave("results/library_analysis/gp120_Input_Lib2_histogram.jpg")
+```
+
+```{r}
+gp120_library1_histogram <- count_data %>% 
+  select("gp120_library1") 
+
+qplot(gp120_library1_histogram$"gp120_library1", geom="histogram", binwidth=5, ylab="# of peptides", xlab="read counts - Library without subcycling") + theme_classic(base_size = 20)
+
+ggsave("results/library_analysis/gp120_Input_Lib1_nosub_histogram.jpg")
+```
+
+
+Want to see how many peptides are counted 0 times in each library
+```{r}
+sum(gp120_sub_library1_histogram$"gp120_sub_library1" == 0)
+nrow(gp120_sub_library1_histogram)
+```
+
+```{r}
+sum(gp120_sub_library3_histogram$"gp120_sub_library3" == 0)
+nrow(gp120_sub_library3_histogram)
+```
+```{r}
+sum(gp120_library1_histogram$"gp120_library1" == 0)
+nrow(gp120_library1_histogram)
+```
+
+Now plot correlation plots in a matrix, with regression lines
+```{r}
+ggpairs(Input_counts, columns=c("gp120_sub_library1", "gp120_sub_library3"), diag = list("continuous"="blank")) + theme_bw(base_size = 12)
+
+ggsave("results/library_analysis/gp120_Input_correlations_withoutlier.jpg")
+```
+
+
+
+##Coverage of oligos across the protein, compared between libraries
+
+Plot read count by position (aka 'Loc') for BG505_gp120 in each input library
+```{r}
+
+BG505_gp120_Lib1 <-Input_counts %>% filter(Virus == "BG505") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp120 amino acid position", y="total reads")
+
+BG505_gp120_Lib2 <-Input_counts %>% filter(Virus == "BG505") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library3`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="BG505 gp120 amino acid position", y="total reads")
+
+
+grid.arrange(BG505_gp120_Lib1, BG505_gp120_Lib2, ncol=1)
+
+BG505_gp120 <- arrangeGrob(BG505_gp120_Lib1, BG505_gp120_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp120_coverageplots_BG505.jpg", BG505_gp120)
+
+```
+
+Plot read count by row number (aka 'Loc') for B41_gp120 in each input library
+```{r}
+
+B41_gp120_Lib1 <-Input_counts %>% filter(Virus == "B41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="B41 gp120 amino acid position", y="total reads")
+
+B41_gp120_Lib2 <-Input_counts %>% filter(Virus == "B41") %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library3`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="B41 gp120 amino acid position", y="total reads")
+
+
+grid.arrange(B41_gp120_Lib1, B41_gp120_Lib2,ncol=1)
+
+B41_gp120 <- arrangeGrob(B41_gp120_Lib1, B41_gp120_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp120_coverageplots_B41.jpg", B41_gp120)
+
+```
+
+
+
+Plot read count by position (aka 'Loc') for DU422_gp120 in each input library
+```{r}
+
+DU422_gp120_Lib1 <-Input_counts %>% filter(Virus == "DU422")  %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library1`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="DU422 gp120 amino acid position", y="total reads")
+
+DU422_gp120_Lib2 <-Input_counts %>% filter(Virus == "DU422")  %>% group_by(Correct_Loc) %>% summarise(read_total = sum(`gp120_sub_library3`)) %>% ggplot() + geom_col(aes(x = Correct_Loc, y =read_total)) + theme_classic() +labs(x="DU422 gp120 amino acid position", y="total reads")
+
+grid.arrange(DU422_gp120_Lib1, DU422_gp120_Lib2, ncol=1)
+
+DU422_gp120 <- arrangeGrob(DU422_gp120_Lib1, DU422_gp120_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp120_coverageplots_DU422.jpg", DU422_gp120)
+
+```
+
+
+
+Now, I am just interested in seeing if ANY peptide was sequenced at each position (yes or no). Ideally we should sequence 20 peptides at each locus at least once
+Plot read presence by position (aka 'Loc') for gp120 in each gp120 protein library
+```{r}
+BG505_gp120_counts <- Input_counts  %>% filter(Virus=="BG505")
+B41_gp120_counts <- Input_counts  %>% filter(Virus=="B41")
+DU422_gp120_counts <- Input_counts  %>% filter(Virus=="DU422")
+
+
+BG505_gp120_counts$peptide_yes_no_Lib1 = ifelse(BG505_gp120_counts$'gp120_sub_library1'==0,0,1)
+
+B41_gp120_counts$peptide_yes_no_Lib1 = ifelse(B41_gp120_counts$'gp120_sub_library1'==0,0,1)
+
+DU422_gp120_counts$peptide_yes_no_Lib1 = ifelse(DU422_gp120_counts$'gp120_sub_library1'==0,0,1)
+```
+
+##Coverage plots for gp120, Library 1
+```{r}
+BG505_gp120_Lib1 <- BG505_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="BG505 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+B41_gp120_Lib1 <- B41_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="B41 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+DU422_gp120_Lib1 <- DU422_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib1), width=1) + labs(x="DU422 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+grid.arrange(BG505_gp120_Lib1, B41_gp120_Lib1, DU422_gp120_Lib1, ncol=1)
+
+gp120_Lib1_coverage <- arrangeGrob(BG505_gp120_Lib1, B41_gp120_Lib1, DU422_gp120_Lib1, ncol=1)
+
+ggsave(file="results/library_analysis/gp120_Lib1_coverageplots.jpg", gp120_Lib1_coverage, width=8)
+
+```
+
+```{r}
+BG505_gp120_counts$peptide_yes_no_Lib2 = ifelse(BG505_gp120_counts$'gp120_sub_library3'==0,0,1)
+
+B41_gp120_counts$peptide_yes_no_Lib2 = ifelse(B41_gp120_counts$'gp120_sub_library3'==0,0,1)
+
+DU422_gp120_counts$peptide_yes_no_Lib2 = ifelse(DU422_gp120_counts$'gp120_sub_library3'==0,0,1)
+```
+
+
+```{r}
+BG505_gp120_Lib2 <- BG505_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="BG505 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+B41_gp120_Lib2 <- B41_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="B41 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12) 
+
+DU422_gp120_Lib2 <- DU422_gp120_counts %>% ggplot() + geom_col(aes(x = Correct_Loc, y =peptide_yes_no_Lib2), width=1) + labs(x="DU422 gp120 amino acid position", y="# of peptides") + theme_classic(base_size = 12)
+
+grid.arrange(BG505_gp120_Lib2, B41_gp120_Lib2, DU422_gp120_Lib2, ncol=1)
+
+gp120_Lib2_coverage <- arrangeGrob(BG505_gp120_Lib2, B41_gp120_Lib2, DU422_gp120_Lib2, ncol=1)
+
+ggsave(file="results/library_analysis/gp120_Lib2_coverageplots.jpg", gp120_Lib2_coverage, width=8)
+
+```
+

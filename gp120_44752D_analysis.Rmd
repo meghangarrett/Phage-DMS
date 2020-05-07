@@ -1,0 +1,698 @@
+---
+title: "Analysis of 447-52D selection with gp120 Phage-DMS libraries"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+##Code to analyze the deep sequencing results from a PhIP seq experiment
+Generally I get back sequencing data back from Ryan Basom in an "annotated counts sheet" with read counts from each sample/bead/input condition. Here is a list of all the columns of data I get back in the annotated counts sheet: 
+* id: this is a unique number identifying each oligo
+* Virus_Protein_Loc_AA: This is a column with each identifier separated by an underscore. 
+  + Virus is the viral strain we generated oligos against (ex: BG505, BF520, etc)
+  + Protein is the Env protein (ex: gp120, gp41, V3)
+  + Loc is the locus within the protein, starting from the first amino acid of the protein
+  + AA is the amino acid identity of the central residue in the oligo sequence (which has every single amino acid possibility)
+* Oligo: This column contains the nucleotide sequence of the unique oligo, with the 18 bp 5' adaptor and 16 bp 3' adaptor
+* samples: can be read counts from antibody selected, bead selected, or input library conditions. Here is the universal naming scheme:
+  + Antibody selected samples will have an x before the name (ex: x44752D) as several antibodies have numbered names (which R doesn't like) 
+  + Technical replicates will have an _1 or _2 after the name (ex: beads_1, input_1)
+  + The beads-only selected condition will be named "beads"
+  + The input library condition will be named "input"
+
+##Load libraries
+```{r}
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library(ggpubr)
+library(reshape2)
+```
+
+
+**FIRST REPLICATE**
+##Load data, separate out columns, generate column with oligo sequence without the adaptors
+Load annotated counts sheet
+```{r}
+
+analysis_rep1 <-read_csv("data/2019.03.07.annotatedCounts.csv")
+
+print(analysis_rep1)
+```
+
+
+Create column called "sequence" which has the nucleotide sequence of the peptides displayed on the surface of the phage. Adaptors are 18 bp (5') and 16 bp (3').
+```{r}
+analysis_rep1$sequence = substr(analysis_rep1$Oligo,19,nchar(analysis_rep1$Oligo)-16)
+
+print(analysis_rep1)
+```
+
+##Import the gp120 Phage-DMS library key in order to label each peptide with the correct position and WT labels
+Import csv, then left join the WT table together to the analysis table
+
+```{r}
+WT_protein_tibble <- read_csv("data/gp120_PhageDMS_library_key.csv")
+
+analysis_rep1 <- left_join(analysis_rep1, WT_protein_tibble, by = c("Loc", "AA", "Virus", "Protein")) 
+
+#This is to fill in the HXB2_Loc and Correct_Loc numbers within a group
+analysis_rep1 <- analysis_rep1 %>% 
+  group_by(Virus, Protein, Loc) %>% 
+  fill(HXB2_Loc, .direction = c("up")) %>%
+  fill(HXB2_Loc, .direction = c("down")) %>%
+  fill(Correct_Loc, .direction = c("up")) %>%
+  fill(Correct_Loc, .direction = c("down")) %>%
+  ungroup()
+```
+
+##Examine correlation between technical replicates
+Only continue analyzing samples which have higher than 75% reproducibility (except for beads, which doesn't usually have very high reproducibility since there's more chance involved)
+
+Right now I am manually doing this for all samples tested, but would love to do this in a loop!
+```{r}
+correlation_tibble <- data.frame(sample = 'x44752D', correlation = cor(analysis_rep1$x44752D_1,analysis_rep1$x44752D_2),stringsAsFactors = F) %>% as_tibble  
+
+correlation_tibble <- add_row(correlation_tibble, sample = 'beads', correlation = cor(analysis_rep1$beads_1,analysis_rep1$beads_2)) 
+
+print(correlation_tibble)
+
+```
+
+Just for shits and giggles, I'm going to remove the outlier and then redo the correlations
+
+```{r}
+analysis_rep1_no_outlier <- analysis_rep1 %>% select(x44752D_1, x44752D_2, beads_1, beads_2, input_1) %>%  filter_all(all_vars(.< 6000))
+
+```
+
+```{r}
+correlation_tibble_no_outlier <- data.frame(sample = 'x44752D', correlation = cor(analysis_rep1_no_outlier$x44752D_1,analysis_rep1_no_outlier$x44752D_2),stringsAsFactors = F) %>% as_tibble  
+
+correlation_tibble_no_outlier <- add_row(correlation_tibble_no_outlier, sample = 'beads', correlation = cor(analysis_rep1_no_outlier$beads_1,analysis_rep1_no_outlier$beads_2)) 
+
+
+print(correlation_tibble_no_outlier)
+
+```
+
+
+Now plot the correlations (without the outlier). Right now I am doing this with a simple scatter plot, but in the future I should maybe consider doing a ggpairs correlation plot.
+```{r}
+
+x44752D_correlation <- ggplot(analysis_rep1_no_outlier, aes(x=x44752D_1, y=x44752D_2)) + geom_point()
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_rep1.jpg", x44752D_correlation)
+
+beads_correlation <- ggplot(analysis_rep1_no_outlier, aes(x=beads_1, y=beads_2)) + geom_point()
+ggsave(file = "results/mAb_analysis/gp120_44752D/beads_correlation_rep1.jpg", beads_correlation)
+
+
+```
+
+```{r}
+x2019_03_07_correlation_plots <- grid.arrange(arrangeGrob(x44752D_correlation, beads_correlation, ncol=2, top="2019.03.07 correlation plots"))
+
+
+ggsave(file="results/mAb_analysis/gp120_44752D/2019_03_07_correlation_plots.jpg", x2019_03_07_correlation_plots)
+```
+
+```{r}
+x44752D_correlation <- ggplot(analysis_rep1_no_outlier, aes(x=x44752D_1, y=x44752D_2)) + geom_point() +stat_cor(method="pearson", size = 8) + xlab("read counts - technical replicate 1") +ylab("read counts - technical replicate 2") + theme_classic(base_size = 24)
+
+
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_rep1_fig.jpg", x44752D_correlation)
+```
+
+##Add together technical replicates
+Add together the read counts from the two technical replicates of the beads only, input, and antibody selections. 
+```{r}
+analysis_rep1$sum_44752D <- analysis_rep1$`x44752D_1` + analysis_rep1$`x44752D_2`
+
+analysis_rep1$sum_input <- analysis_rep1$`input_1` + analysis_rep1$`input_2` 
+```
+
+
+
+##Calculate the fold enrichment of WT peptides across each Virus/Protein combination
+Right now I am just looking at the fold enrichment of single peptides centered at a residue, but alternatively I could calculate fold enrichment by finding the average enrichment of any peptide spanning a residue (+/- 15 aa, since the peptides are 31 aa long). Fold enrichment is calculated as freq_sample / freq_input. 
+
+
+Calculate the freq of each peptide in each of the samples. Freq = read count/total read count. 
+
+Need to add a pseudocount to each peptide's read count. I scale this according to the read depth (see explanation from the Bloom lab [here](https://jbloomlab.github.io/dms_tools2/diffsel.html#formula-for-differential-selection))
+Calculate pseudocount for each column with a sample (ex: input, beads, and 44752D sample). Treat the beads condition as a sample (aka compare against every antibody/beads sample against the input).
+
+Because the pseudocount is added as a relative weight, we can only add a pseudocount to the input library when we know which sample we are comparing against. Since this code is only analyzing antibody 44752D, I'm adding the pseudocount now. Non-input samples will always be compared to the input to generate a pseudocount.
+
+```{r}
+analysis_rep1 <- analysis_rep1 %>% mutate(sum_44752D_pseudo = case_when( 
+  sum(sum_44752D) / sum(sum_input) < 1 ~ sum_44752D + 1, 
+  sum(sum_44752D) / sum(sum_input) >= 1 ~ sum_44752D +(sum(sum_44752D) / sum(sum_input))*1))
+
+analysis_rep1 <- analysis_rep1 %>% mutate(sum_input_pseudo = case_when( 
+  sum(sum_input) / sum(sum_44752D) < 1 ~ sum_input + 1, 
+  sum(sum_input) / sum(sum_44752D) >= 1 ~ sum_input +(sum(sum_input) / sum(sum_44752D))*1))
+
+```
+
+Now calculate the frequency of each peptide in the samples
+```{r}
+analysis_rep1 <- analysis_rep1 %>% 
+  mutate(freq_44752D = sum_44752D_pseudo / sum(sum_44752D_pseudo)) %>% 
+  mutate(freq_input = sum_input_pseudo/sum(sum_input_pseudo))
+
+```
+
+Now calculate the site-level fold enrichment of all wildtype peptides in the 44752D sample, as compared to the input
+
+
+Right now this only calculates the fold enrichment of WT peptides - I'd like to instead calculat the fold enrichment of all peptides, and later filter by WT when exporting to test with FindSigSel function.
+```{r}
+analysis_rep1 <- analysis_rep1 %>% mutate(fold_enrich_44752D = freq_44752D/freq_input) %>% print()
+
+```
+
+Now plot the fold enrichment across the length of each protein
+**BG505 gp120**
+```{r}
+fold_enrichment_44752D_BG505_gp120 <- analysis_rep1 %>% filter(Protein == 'gp120' & Virus == 'BG505' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "BG505 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_BG505_gp120_rep1.jpg", fold_enrichment_44752D_BG505_gp120, width=8)
+```
+
+**B41 gp120**
+```{r}
+fold_enrichment_44752D_B41_gp120 <- analysis_rep1 %>% filter(Protein == 'gp120' & Virus == 'B41' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "B41 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_B41_gp120_rep1.jpg", fold_enrichment_44752D_B41_gp120, width=8)
+```
+
+**DU422 gp120**
+```{r}
+fold_enrichment_44752D_DU422_gp120 <- analysis_rep1 %>% filter(Protein == 'gp120' & Virus == 'DU422' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "B41 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_DU422_gp120_rep1.jpg", fold_enrichment_44752D_DU422_gp120, width=8)
+```
+
+
+##Differential selection calculations
+Create a column that calculates the mutation-level differential selection. NOTE: I'm not adjusting for mock selected (beads only) condition
+
+
+Create columns with WT frequencies from the 44752D and input conditions.
+```{r}
+WT_freq_44752D <- analysis_rep1 %>% 
+  filter(type == "WT") %>% 
+  select(Loc,Virus, Protein, freq_44752D_WT=freq_44752D) 
+
+analysis_rep1 <- left_join(analysis_rep1, WT_freq_44752D)
+
+WT_freq_input <- analysis_rep1 %>% 
+  filter(type == "WT") %>% 
+  select(Loc, Virus, Protein, freq_input_WT=freq_input) 
+
+analysis_rep1 <- left_join(analysis_rep1, WT_freq_input)
+
+```
+
+Now calculate the differential selection
+```{r}
+analysis_rep1 <- analysis_rep1 %>% mutate(diff_select_44752D = log((freq_44752D/freq_44752D_WT)/(freq_input/freq_input_WT)))
+```
+
+
+##Now calculate the scaled differential selection: multiply the mutation level differential selection and the site level fold enrichment and plot it
+
+Now create a column with the fold enrichment value of the WT , so that I can calculate the scaled differential selection. There has to be a better way to insert the fold enrichment value of the WT peptide, but I can't figure it out. 
+
+If I was subtracting the beads fold enrichment from the sample's fold enrichment, I would need to first take the absolute value of the fold enrichment (this is a hacky way to deal with the negative numbers). But I am not subtracting out the beads, so I don't need to do that!
+```{r}
+fold_enrich_44752D <- analysis_rep1 %>% 
+  select(Loc, Virus, Protein, fold_enrich_44752D_WT=fold_enrich_44752D, type) %>% 
+  filter(type == "WT") %>% 
+  select(Loc, Virus, Protein, fold_enrich_44752D_WT) 
+
+analysis_rep1 <- left_join(analysis_rep1, fold_enrich_44752D)
+```
+
+Now multiply the fold enrichment by the differential selection to get the scaled differential selection.
+```{r}
+analysis_rep1 <- analysis_rep1 %>% mutate(scaled_diff_select_44752D = (diff_select_44752D)*(fold_enrich_44752D_WT))
+```
+
+
+Now plot the scaled differential selection for each Virus/protein combo for the sample 
+***BG505_gp120***
+```{r}
+letter_plot_44752D_BG505_gp120 <- analysis_rep1 %>% filter(Virus == 'BG505' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=0.5) +theme_classic(base_size = 14) +labs(x="BG505 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_BG505_gp120_rep1.jpg", letter_plot_44752D_BG505_gp120, width=10)
+```
+
+
+***B41_gp120***
+```{r}
+letter_plot_44752D_B41_gp120 <- analysis_rep1 %>% filter(Virus == 'B41' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=2) +theme_classic(base_size = 14) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_rep1.jpg", letter_plot_44752D_B41_gp120, width=10)
+```
+Now I only want to look at this plot within the window of the epitope region, +/- 10 residues
+```{r}
+letter_plot_44752D_B41_gp120_window <- analysis_rep1 %>% filter(Virus == 'B41' & Protein == 'gp120') %>% 
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=0.5) +theme_classic(base_size = 14) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") +xlim(250,310) 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_rep1_window.jpg", letter_plot_44752D_B41_gp120_window, width=10)
+```
+
+
+***DU422_gp120***
+```{r}
+letter_plot_44752D_DU422_gp120 <- analysis_rep1 %>% filter(Virus == 'DU422' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=1) +theme_classic(base_size = 14) +labs(x="DU422 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_DU422_gp120_rep1.jpg", letter_plot_44752D_DU422_gp120, width=10)
+```
+
+
+
+
+
+**SECOND REPLICATE**
+##NOW, I will do all of the above for the 2nd replicate, and then in the end average them
+##Load data, separate out columns, generate column with oligo sequence without the adaptors
+Load annotated counts sheet
+```{r}
+analysis_rep2 <-read_csv("data/2019.08.06.annotatedCounts.csv")
+
+print(analysis_rep2)
+```
+
+
+
+Create column called "sequence" which has the nucleotide sequence of the peptides displayed on the surface of the phage. Adaptors are 18 bp (5') and 16 bp (3').
+```{r}
+analysis_rep2$sequence = substr(analysis_rep2$Oligo,19,nchar(analysis_rep2$Oligo)-16)
+
+print(analysis_rep2)
+```
+
+##Import the gp120 Phage-DMS library key in order to label each peptide with the correct position and WT labels
+Import csv, then left join the WT table together to the analysis table
+
+```{r}
+WT_protein_tibble <- read_csv("data/gp120_PhageDMS_library_key.csv")
+
+analysis_rep2 <- left_join(analysis_rep2, WT_protein_tibble, by = c("Loc", "AA", "Virus", "Protein")) 
+
+#This is to fill in the HXB2_Loc and Correct_Loc numbers within a group
+analysis_rep2 <- analysis_rep2 %>% 
+  group_by(Virus, Protein, Loc) %>% 
+  fill(HXB2_Loc, .direction = c("up")) %>%
+  fill(HXB2_Loc, .direction = c("down")) %>%
+  fill(Correct_Loc, .direction = c("up")) %>%
+  fill(Correct_Loc, .direction = c("down")) %>%
+  ungroup()
+```
+
+##Examine correlation between technical replicates
+Only continue analyzing samples which have higher than 75% reproducibility (except for beads, which doesn't usually have very high reproducibility since there's more chance involved)
+
+Right now I am manually doing this for all samples tested, but would love to do this in a loop!
+```{r}
+correlation_tibble <- data.frame(sample = 'x44752D', correlation = cor(analysis_rep2$x44752D_1,analysis_rep2$x44752D_2),stringsAsFactors = F) %>% as_tibble  
+
+correlation_tibble <- add_row(correlation_tibble, sample = 'input', correlation = cor(analysis_rep2$input_1,analysis_rep2$input_2)) 
+
+print(correlation_tibble)
+
+```
+
+Just for shits and giggles, I'm going to remove the outlier and then redo the correlations
+
+```{r}
+analysis_rep2_no_outlier <- analysis_rep2 %>% select(x44752D_1, x44752D_2, input_1, input_2) %>%  filter_all(all_vars(.< 5500))
+
+```
+
+```{r}
+correlation_tibble_no_outlier <- data.frame(sample = 'x44752D', correlation = cor(analysis_rep2_no_outlier$x44752D_1,analysis_rep2_no_outlier$x44752D_2),stringsAsFactors = F) %>% as_tibble  
+
+correlation_tibble_no_outlier <- add_row(correlation_tibble_no_outlier, sample = 'input', correlation = cor(analysis_rep2_no_outlier$input_1,analysis_rep2_no_outlier$input_2)) 
+
+print(correlation_tibble_no_outlier)
+
+```
+
+
+Now plot the correlations (without the outlier). Right now I am doing this with a simple scatter plot, but in the future I should maybe consider doing a ggpairs correlation plot.
+```{r}
+
+x44752D_correlation <- ggplot(analysis_rep2_no_outlier, aes(x=x44752D_1, y=x44752D_2)) + geom_point()
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_rep2.jpg", x44752D_correlation)
+
+input_correlation <- ggplot(analysis_rep2_no_outlier, aes(x=input_1, y=input_2)) + geom_point()
+ggsave(file = "results/mAb_analysis/gp120_44752D/input_correlation_rep2.jpg", input_correlation)
+
+
+```
+
+```{r}
+x2019_08_06_correlation_plots <- grid.arrange(arrangeGrob(x44752D_correlation,  input_correlation, ncol=2, top="2019.08.06 correlation plots"))
+
+
+ggsave(file="results/mAb_analysis/gp120_44752D/2019_08_06_correlation_plots.jpg", x2019_08_06_correlation_plots)
+```
+
+```{r}
+x44752D_correlation <- ggplot(analysis_rep2_no_outlier, aes(x=x44752D_1, y=x44752D_2)) + geom_point() +stat_cor(method="pearson", size = 8) + xlab("read counts - technical replicate 1") +ylab("read counts - technical replicate 2") + theme_classic(base_size = 24)
+
+
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_rep2_fig.jpg", x44752D_correlation)
+```
+
+##Add together technical replicates
+Add together the read counts from the two technical replicates of the beads only, input, and antibody selections. 
+```{r}
+analysis_rep2$sum_44752D <- analysis_rep2$`x44752D_1` + analysis_rep2$`x44752D_2`
+
+analysis_rep2$sum_input <- analysis_rep2$`input_1` + analysis_rep2$`input_2` 
+```
+
+
+
+##Calculate the fold enrichment of WT peptides across each Virus/Protein combination
+Right now I am just looking at the fold enrichment of single peptides centered at a residue, but alternatively I could calculate fold enrichment by finding the average enrichment of any peptide spanning a residue (+/- 15 aa, since the peptides are 31 aa long). Fold enrichment is calculated as freq_sample / freq_input. 
+
+
+Calculate the freq of each peptide in each of the samples. Freq = read count/total read count. 
+
+Need to add a pseudocount to each peptide's read count. I scale this according to the read depth (see explanation from the Bloom lab [here](https://jbloomlab.github.io/dms_tools2/diffsel.html#formula-for-differential-selection))
+Calculate pseudocount for each column with a sample (ex: input, beads, and 44752D sample). Treat the beads condition as a sample (aka compare against every antibody/beads sample against the input).
+
+Because the pseudocount is added as a relative weight, we can only add a pseudocount to the input library when we know which sample we are comparing against. Since this code is only analyzing antibody 44752D, I'm adding the pseudocount now. Non-input samples will always be compared to the input to generate a pseudocount.
+
+```{r}
+analysis_rep2 <- analysis_rep2 %>% mutate(sum_44752D_pseudo = case_when( 
+  sum(sum_44752D) / sum(sum_input) < 1 ~ sum_44752D + 1, 
+  sum(sum_44752D) / sum(sum_input) >= 1 ~ sum_44752D +(sum(sum_44752D) / sum(sum_input))*1))
+
+analysis_rep2 <- analysis_rep2 %>% mutate(sum_input_pseudo = case_when( 
+  sum(sum_input) / sum(sum_44752D) < 1 ~ sum_input + 1, 
+  sum(sum_input) / sum(sum_44752D) >= 1 ~ sum_input +(sum(sum_input) / sum(sum_44752D))*1))
+
+
+```
+
+Now calculate the frequency of each peptide in the samples
+```{r}
+analysis_rep2 <- analysis_rep2 %>% 
+  mutate(freq_44752D = sum_44752D_pseudo / sum(sum_44752D_pseudo)) %>% 
+  mutate(freq_input = sum_input_pseudo/sum(sum_input_pseudo))
+
+```
+
+Now calculate the site-level fold enrichment of all wildtype peptides in the 44752D sample, as compared to the input
+
+
+Right now this only calculates the fold enrichment of WT peptides - I'd like to instead calculate the fold enrichment of all peptides, and later filter by WT when exporting to test with FindSigSel function.
+```{r}
+analysis_rep2 <- analysis_rep2 %>% mutate(fold_enrich_44752D = freq_44752D/freq_input) %>% print()
+```
+
+Now plot the fold enrichment across the length of each protein
+**BG505 gp120**
+```{r}
+fold_enrichment_44752D_BG505_gp120 <- analysis_rep2 %>% filter(Protein == 'gp120' & Virus == 'BG505' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "BG505 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_BG505_gp120_rep2.jpg", fold_enrichment_44752D_BG505_gp120, width=8)
+```
+
+**B41 gp120**
+```{r}
+fold_enrichment_44752D_B41_gp120 <- analysis_rep2 %>% filter(Protein == 'gp120' & Virus == 'B41' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "B41 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_B41_gp120_rep2.jpg", fold_enrichment_44752D_B41_gp120, width=8)
+```
+
+**DU422 gp120**
+```{r}
+fold_enrichment_44752D_DU422_gp120 <- analysis_rep2 %>% filter(Protein == 'gp120' & Virus == 'DU422' & type == 'WT') %>% ggplot(aes(x=HXB2_Loc, y = fold_enrich_44752D)) +geom_point(aes(colour = fold_enrich_44752D)) +labs(x = "DU422 gp120 amino acid position", y = "fold enrichment") +theme_classic(base_size = 14) + scale_colour_gradient(low = "grey", high = "red") + theme(legend.position = "none")
+
+ggsave(file="results/mAb_analysis/gp120_44752D/fold_enrichment_44752D_DU422_gp120_rep2.jpg", fold_enrichment_44752D_DU422_gp120, width=8)
+```
+
+
+##Differential selection calculations
+Create a column that calculates the mutation-level differential selection. NOTE: I'm not adjusting for mock selected (beads only) condition
+
+
+Create columns with WT frequencies from the 44752D and input conditions.
+```{r}
+WT_freq_44752D <- analysis_rep2 %>% 
+  filter(type == "WT") %>% 
+  select(Loc,Virus, Protein, freq_44752D_WT=freq_44752D) 
+
+analysis_rep2 <- left_join(analysis_rep2, WT_freq_44752D)
+
+WT_freq_input <- analysis_rep2 %>% 
+  filter(type == "WT") %>% 
+  select(Loc, Virus, Protein, freq_input_WT=freq_input) 
+
+analysis_rep2 <- left_join(analysis_rep2, WT_freq_input)
+
+```
+
+Now calculate the differential selection
+```{r}
+analysis_rep2 <- analysis_rep2 %>% mutate(diff_select_44752D = log((freq_44752D/freq_44752D_WT)/(freq_input/freq_input_WT)))
+```
+
+##Now calculate the scaled differential selection: multiply the mutation level differential selection and the site level fold enrichment and plot it
+
+Now create a column with the fold enrichment value of the WT , so that I can calculate the scaled differential selection. There has to be a better way to insert the fold enrichment value of the WT peptide, but I can't figure it out. 
+
+If I was subtracting the beads fold enrichment from the sample's fold enrichment, I would need to first take the absolute value of the fold enrichment (this is a hacky way to deal with the negative numbers). But I am not subtracting out the beads, so I don't need to do that!
+
+```{r}
+fold_enrich_44752D <- analysis_rep2 %>% 
+  select(Loc, Virus, Protein, fold_enrich_44752D_WT=fold_enrich_44752D, type) %>% 
+  filter(type == "WT") %>% 
+  select(Loc, Virus, Protein, fold_enrich_44752D_WT) 
+
+analysis_rep2 <- left_join(analysis_rep2, fold_enrich_44752D)
+```
+
+Now multiply the fold enrichment by the differential selection to get the scaled differential selection.
+```{r}
+analysis_rep2 <- analysis_rep2 %>% mutate(scaled_diff_select_44752D = (diff_select_44752D)*(fold_enrich_44752D_WT))
+```
+
+
+
+Now plot the scaled differential selection for each Virus/protein combo for the sample 
+***BG505_gp120***
+```{r}
+letter_plot_44752D_BG505_gp120 <- analysis_rep2 %>% filter(Virus == 'BG505' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=0.5) +theme_classic(base_size = 14) +labs(x="BG505 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_BG505_gp120_rep2.jpg", letter_plot_44752D_BG505_gp120, width=10)
+```
+
+
+***B41_gp120***
+```{r}
+letter_plot_44752D_B41_gp120 <- analysis_rep2 %>% filter(Virus == 'B41' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=2) +theme_classic(base_size = 14) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_rep2.jpg", letter_plot_44752D_B41_gp120, width=10)
+```
+Now I only want to look at this plot within the window of the epitope region, +/- 10 residues
+```{r}
+letter_plot_44752D_B41_gp120_window <- analysis_rep2 %>% filter(Virus == 'B41' & Protein == 'gp120') %>% 
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=0.3) +theme_classic(base_size = 14) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") +xlim(260,310) 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_rep2_window.jpg", letter_plot_44752D_B41_gp120_window, width=10)
+```
+
+***DU422_gp120***
+```{r}
+letter_plot_44752D_DU422_gp120 <- analysis_rep2 %>% filter(Virus == 'DU422' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Loc, y = scaled_diff_select_44752D, label = AA)) +coord_fixed(ratio=1) +theme_classic(base_size = 14) +labs(x="DU422 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_DU422_gp120_rep2.jpg", letter_plot_44752D_DU422_gp120, width=10)
+```
+
+
+##Average the biological duplicates!!
+Need to average the fold enrichment values and the differential selection values, then re plot the fold enrichment along the proteins, and the scaled differential selection
+
+Create new table, with the fold enrichment values and differential selection values from each replicate
+```{r}
+avg_analysis <- analysis_rep1 %>% select(id, Virus, Protein, Correct_Loc, AA, type, HXB2_Loc, rep1_sum_44752D=sum_44752D, rep1_fold_enrich_44752D=fold_enrich_44752D, rep1_scaled_diff_select_44752D=scaled_diff_select_44752D, rep1_diff_select_44752D=diff_select_44752D)
+```
+
+
+```{r}
+rep2 <- analysis_rep2 %>% select(id, Virus, Protein, Correct_Loc, AA, type, HXB2_Loc, rep2_sum_44752D=sum_44752D, rep2_fold_enrich_44752D=fold_enrich_44752D, rep2_scaled_diff_select_44752D=scaled_diff_select_44752D, rep2_diff_select_44752D=diff_select_44752D) 
+
+avg_analysis <- left_join(rep2, avg_analysis)
+
+```
+##Now plot the correlation between biological duplicates
+```{r}
+x44752D_correlation <- ggplot(avg_analysis, aes(x=rep1_sum_44752D, y=rep2_sum_44752D)) + geom_point()+stat_cor(method="pearson", size = 8) + xlab("read counts - biological replicate 1") +ylab("read counts - biological replicate 2") + theme_classic(base_size = 24)
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_biological_duplicates.jpg", x44752D_correlation)
+```
+Now remove the outlier, and then redo the biological duplicates
+```{r}
+avg_analysis_no_outlier <- avg_analysis %>% select(rep1_sum_44752D, rep2_sum_44752D) %>% filter_all(all_vars(.< 20000))
+
+
+x44752D_correlation <- ggplot(avg_analysis_no_outlier, aes(x=rep1_sum_44752D, y=rep2_sum_44752D)) + geom_point()
+ggsave(file = "results/mAb_analysis/gp120_44752D/x44752D_correlation_biological_duplicates_nooutlier.jpg", x44752D_correlation)
+```
+
+
+```{r}
+correlation_tibble_no_outlier <- data.frame(sample = 'x44752D', correlation = cor(avg_analysis_no_outlier$rep1_sum_44752D,avg_analysis_no_outlier$rep2_sum_44752D),stringsAsFactors = F) %>% as_tibble
+
+print(correlation_tibble_no_outlier)
+```
+
+##Now average the fold enrichment values
+```{r}
+avg_analysis <- avg_analysis %>% mutate(avg_fold_enrich_44752D = (rep1_fold_enrich_44752D + rep2_fold_enrich_44752D)/2)
+```
+
+
+Now plot the fold enrichment across the length of each protein
+**Combined gp120**
+```{r}
+fold_enrichment_44752D_gp120 <- avg_analysis %>% filter(Protein == 'gp120' & type == 'WT') %>% ggline( x='HXB2_Loc', y = 'avg_fold_enrich_44752D', group = 'Virus', color = 'Virus', palette = 'Dark2', add = NULL, conf.int = FALSE, cor.coef = FALSE, xlab = "HXB2 Env amino acid position", ylab = "fold enrichment") +theme_classic(base_size = 22) + scale_x_discrete( breaks = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500))
+
+fold_enrichment_44752D_gp120 <- ggpar(fold_enrichment_44752D_gp120, ylim = c(-1, 40), legend=c(.9,.8))
+
+ggsave(file="results/mAb_analysis/gp120_44752D/avg_fold_enrichment_44752D_gp120.jpg", fold_enrichment_44752D_gp120, width=9)
+```
+
+**BG505 gp120**
+```{r}
+fold_enrichment_44752D_BG505_gp120 <- avg_analysis %>% filter(Protein == 'gp120' & Virus == 'BG505' & type == 'WT') %>% ggline( x='HXB2_Loc', y = 'avg_fold_enrich_44752D', add = NULL, conf.int = FALSE, cor.coef = FALSE, xlab = "HXB2 Env amino acid position", ylab = "fold enrichment") +theme_classic(base_size = 22) + scale_x_discrete( breaks = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500))
+
+fold_enrichment_44752D_BG505_gp120 <- ggpar(fold_enrichment_44752D_BG505_gp120, ylim = c(-1, 25))
+
+ggsave(file="results/mAb_analysis/gp120_44752D/avg_fold_enrich_44752D_BG505_gp120.jpg", fold_enrichment_44752D_BG505_gp120, width=8)
+```
+
+**B41 gp120**
+```{r}
+fold_enrichment_44752D_B41_gp120 <- avg_analysis %>% filter(Protein == 'gp120' & Virus == 'B41' & type == 'WT') %>% ggline( x='HXB2_Loc', y = 'avg_fold_enrich_44752D', add = NULL, conf.int = FALSE, cor.coef = FALSE, xlab = "HXB2 Env amino acid position", ylab = "fold enrichment") +theme_classic(base_size = 22) + scale_x_discrete( breaks = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500))
+
+ggsave(file="results/mAb_analysis/gp120_44752D/avg_fold_enrich_44752D_B41_gp120.jpg", fold_enrichment_44752D_B41_gp120, width=8)
+```
+
+**DU422 gp120**
+```{r}
+fold_enrichment_44752D_DU422_gp120 <- avg_analysis %>% filter(Protein == 'gp120' & Virus == 'DU422' & type == 'WT') %>% ggline( x='HXB2_Loc', y = 'avg_fold_enrich_44752D', add = NULL, conf.int = FALSE, cor.coef = FALSE, xlab = "HXB2 Env amino acid position", ylab = "fold enrichment") +theme_classic(base_size = 22) + scale_x_discrete( breaks = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500))
+
+fold_enrichment_44752D_DU422_gp120 <- ggpar(fold_enrichment_44752D_DU422_gp120, ylim = c(-1, 25))
+
+ggsave(file="results/mAb_analysis/gp120_44752D/avg_fold_enrich_44752D_DU422_gp120.jpg", fold_enrichment_44752D_DU422_gp120, width=8)
+```
+
+##Now average together the differential selection values
+```{r}
+avg_analysis <- avg_analysis %>% mutate(avg_diffselect_44752D = (rep1_diff_select_44752D + rep2_diff_select_44752D)/2)
+```
+
+##Now average together the scaled differential selection values
+```{r}
+avg_analysis <- avg_analysis %>% mutate(avg_scaled_diffselect_44752D = (rep1_scaled_diff_select_44752D + rep2_scaled_diff_select_44752D)/2)
+```
+
+Now plot the scaled differential selection for each Virus/protein combo for the sample 
+***BG505_gp120***
+```{r}
+letter_plot_44752D_BG505_gp120 <- avg_analysis %>% filter(Virus == 'BG505' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Correct_Loc, y = avg_scaled_diffselect_44752D, label = AA)) +coord_fixed(ratio=0.4) +theme_classic(base_size = 14) +labs(x="BG505 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_BG505_gp120_avg.jpg", letter_plot_44752D_BG505_gp120, width = 8, height = 6)
+```
+Now I only want to look at this plot within the window of the epitope region, +/- 10 residues
+```{r}
+letter_plot_44752D_BG505_gp120_window <- avg_analysis %>% filter(Virus == 'BG505' & Protein == 'gp120') %>% 
+  ggplot() + geom_text(aes(x = Correct_Loc, y = avg_scaled_diffselect_44752D, label = AA)) +coord_fixed(ratio=1) +theme_classic(base_size = 14) +labs(x="BG505 gp120 amino acid position", y="scaled differential selection") +xlim(255,310) 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_BG505_gp120_avg_window.jpg", letter_plot_44752D_BG505_gp120_window, width=10)
+```
+
+***B41_gp120***
+```{r}
+letter_plot_44752D_B41_gp120 <- avg_analysis %>% filter(Virus == 'B41' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Correct_Loc, y = avg_scaled_diffselect_44752D, label = AA)) +coord_fixed(ratio=3.5) +theme_classic(base_size = 14) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_avg.jpg", letter_plot_44752D_B41_gp120, width=10)
+```
+Now I only want to look at this plot within the window of the epitope region, +/- 10 residues
+```{r}
+letter_plot_44752D_B41_gp120_window <- avg_analysis %>% filter(Virus == 'B41' & Protein == 'gp120') %>% 
+  ggplot() + geom_text(aes(x = Correct_Loc, y = avg_scaled_diffselect_44752D, label = AA), size=7) +coord_fixed(ratio=0.15) +theme_classic(base_size = 32) +labs(x="B41 gp120 amino acid position", y="scaled differential selection") +xlim(272,305) 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_B41_gp120_avg_window.jpg", letter_plot_44752D_B41_gp120_window, width=10)
+```
+
+***DU422_gp120***
+
+```{r}
+letter_plot_44752D_DU422_gp120 <- avg_analysis %>% filter(Virus == 'DU422' & Protein == 'gp120') %>%
+  ggplot() + geom_text(aes(x = Correct_Loc, y = avg_scaled_diffselect_44752D, label = AA)) +coord_fixed(ratio=1) +theme_classic(base_size = 14) +labs(x="DU422 gp120 amino acid position", y="scaled differential selection") 
+ggsave(file="results/mAb_analysis/gp120_44752D/letter_plot_44752D_DU422_gp120_avg.jpg", letter_plot_44752D_DU422_gp120, width=10)
+```
+
+##Now, I want to export the scaled diff selection data to visualize as a heatmap
+I will have to export it as a table just looking within the epitope region, need to reorder it as a matrix and one column has to have the position and WT aa (ex: G559)
+
+First I need to create a new row that has the position and WT aa
+```{r}
+#First create a new column 
+avg_analysis_extra <- avg_analysis %>%
+  filter(type == "WT") %>%
+  unite(Title, c(AA, HXB2_Loc), sep = "", remove = FALSE) %>%
+  select(Title, Virus, Protein, Correct_Loc)
+
+avg_analysis <- left_join(avg_analysis, avg_analysis_extra, by = c("Virus", "Protein", "Correct_Loc"))
+
+```
+
+
+Now, create a matrix just with the B41 gp120 data
+```{r}
+#This pulls the scaled differential selection data from just B41 gp120, only want region of epitope (between 209 and 339). Right now this is arbitrary.
+
+B41_gp120_matrix <- avg_analysis %>% 
+  filter(Virus == 'B41' & Protein == 'gp120') %>% 
+  filter(Correct_Loc %in% 309:339) %>%
+  select(Title, AA, avg_scaled_diffselect_44752D) %>%
+  acast(AA ~ Title)
+```
+
+Now reorder the columns to match the order they were in before (this is because R automatically orders the columns alphabetically, which is not what I want)
+```{r}
+#Create a data frame with just the WT Titles from the epitope region
+B41_gp120_df <- avg_analysis %>% 
+  filter(Virus == 'B41' & Protein == 'gp120' & type == 'WT') %>% 
+  filter(Correct_Loc %in% 309:339)
+  
+#This stores the values in the column "Title" as a vector
+col.order <- as.vector(B41_gp120_df$Title)
+
+#This rearranges the matrix so that the order is the same as in the vector created above
+B41_gp120_matrix <- B41_gp120_matrix[,col.order]
+```
+
+Now reorder the rows to match the order they were in before (this is because R automatically orders the rows alphabetically, which is not what I want)
+```{r}
+#This stores the order of the specified amino acids as a vector
+row.order <- c("G", "P", "A", "I", "L", "V", "F", "W", "Y", "M", "C", "S", "T", "N", "Q", "H", "K", "R", "D", "E")
+
+#This rearranges the rows according to the row order vector
+B41_gp120_matrix <- B41_gp120_matrix[row.order,]
+```
+
+
+Now export this matrix as a table
+```{r}
+write.csv(B41_gp120_matrix, file="results/mAb_analysis/gp120_44752D/B41_gp120_44752D_matrix.csv")
+```
+
