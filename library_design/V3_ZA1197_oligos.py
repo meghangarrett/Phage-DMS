@@ -146,8 +146,8 @@ def remove_rsites(oligos, codon_scores_by_aa):
                             rsites_count += 1
                             if oligos[n][i-(i%3):i-(i%3)+3] == 'ATG' or oligos[n][i-(i%3):i-(i%3)+3] == 'TGG': #Make sure codon to replace has synonymous codons
                                 j = i + 3
-                                print('Codon to replace ({0}) has no synonymous codons. Replace next codon: {1}'). \
-                                        format(oligos[n][i-(i%3):i-(i%3)+3], oligos[n][j-(j%3):j-(j%3)+3])
+                                print(f"Codon to replace ({oligos[n][i-(i%3):i-(i%3)+3]}) has no synonymous codons."+
+                                      f"Replace next codon: {oligos[n][j-(j%3):j-(j%3)+3]}")
                                 i = j
                             for r in codon_scores_by_aa: #For each amino acid...
                                 for codon_tup in codon_scores_by_aa[r]: #...And for each (codon, score) tuple that encodes that aa...
