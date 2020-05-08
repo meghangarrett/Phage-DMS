@@ -1,7 +1,4 @@
 # Phage-DMS
-<<<<<<< Updated upstream
-analysis of Phage-DMS data to determine antibody epitopes
-=======
 Analysis of Phage-DMS data to determine antibody epitopes
 
 ## Contents
