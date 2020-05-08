@@ -1,4 +1,4 @@
-"""Script for making oligos for gp41 'mutational scan' phage display assay."""
+"""Script for making oligos for gp120 'mutational scan' phage display assay."""
 
 import Bio.Seq
 import Bio.SeqUtils.CodonUsageIndices
